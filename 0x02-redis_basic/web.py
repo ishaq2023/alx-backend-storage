@@ -1,37 +1,35 @@
 #!/usr/bin/env python3
-
+"""
+Module for web
+"""
 import requests
-import time
+import redis
+from typing import Callable
+from functools import wraps
 
-# Dictionary to store cached pages and their access counts
-cache = {}
+def count_url_calls(method: Callable) -> Callable:
+    """
+    Decorator to count how many times a particular URL was accessed.
+    """
+    @wraps(method)
+    def wrapper(url: str):
+        """
+        Wrapper function for decorator
+        """
+        _redis = redis.Redis()
+        _redis.incr(f"count:{url}")
+        return method(url)
 
-def cache_page(func):
-    def wrapper(url):
-        # Check if the URL is in the cache
-        if url in cache:
-            # Check if the cached entry is still valid (within 10 seconds)
-            if time.time() - cache[url]['timestamp'] < 10:
-                cache[url]['count'] += 1  # Increment access count
-                return cache[url]['content']
-
-        # If not in cache or expired, call the original function
-        content = func(url)
-
-        # Update cache with new content and access count
-        cache[url] = {
-            'content': content,
-            'timestamp': time.time(),
-            'count': 1
-        }
-        return content
     return wrapper
 
-@cache_page
+@count_url_calls
 def get_page(url: str) -> str:
-    return requests.get(url).text
-
-# Test the function
-url = "http://slowwly.robertomurray.co.uk/delay/1000/url/http://www.example.com"
-print(get_page(url))
-print(get_page(url))
+    """
+    Get the HTML content of a particular URL and cache the result
+    """
+    _redis = redis.Redis()
+    response = _redis.get(url)
+    if response is None:
+        response = requests.get(url).text
+        _redis.setex(url, 10, response)
+    return response
