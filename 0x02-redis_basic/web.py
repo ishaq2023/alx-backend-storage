@@ -1,42 +1,54 @@
 #!/usr/bin/env python3
-"""
-Module for web
-"""
-import requests
+"""In this tasks, we will implement a get_page function
+(prototype: def get_page(url: str) -> str:). The core of
+the function is very simple. It uses the requests module
+to obtain the HTML content of a particular URL and returns it.
+
+Start in a new file named web.py and do not reuse the code
+written in exercise.py.
+
+Inside get_page track how many times a particular URL was
+accessed in the key "count:{url}" and cache the result with
+an expiration time of 10 seconds.
+
+Tip: Use http://slowwly.robertomurray.co.uk to simulate
+a slow response and test your caching."""
+
+
 import redis
+import requests
+from functools import wraps
 
+r = redis.Redis()
+
+
+def url_access_count(method):
+    """decorator for get_page function"""
+    @wraps(method)
+    def wrapper(url):
+        """wrapper function"""
+        key = "cached:" + url
+        cached_value = r.get(key)
+        if cached_value:
+            return cached_value.decode("utf-8")
+
+            # Get new content and update cache
+        key_count = "count:" + url
+        html_content = method(url)
+
+        r.incr(key_count)
+        r.set(key, html_content, ex=10)
+        r.expire(key, 10)
+        return html_content
+    return wrapper
+
+
+@url_access_count
 def get_page(url: str) -> str:
-    """
-    Retrieve the HTML content of a URL and cache the result with an expiration time of 10 seconds.
+    """obtain the HTML content of a particular"""
+    results = requests.get(url)
+    return results.text
 
-    Args:
-        url (str): The URL of the page to retrieve.
-
-    Returns:
-        str: The HTML content of the page.
-    """
-    # Initialize Redis client
-    redis_client = redis.Redis()
-
-    # Increment the count for the URL
-    count_key = f"count:{url}"
-    redis_client.incr(count_key)
-
-    # Retrieve cached page content if available
-    cached_content = redis_client.get(url)
-    if cached_content:
-        return cached_content.decode('utf-8')
-
-    # Fetch the page content
-    response = requests.get(url)
-    page_content = response.text
-
-    # Cache the page content with an expiration time of 10 seconds
-    redis_client.setex(url, 10, page_content)
-
-    return page_content
 
 if __name__ == "__main__":
-    # Example usage
-    url = "http://slowwly.robertomurray.co.uk/delay/5000/url/http://www.google.com"
-    print(get_page(url))  # This might take some time to retrieve due to the delay
+    get_page('http://slowwly.robertomurray.co.uk')
